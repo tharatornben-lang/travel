@@ -35,7 +35,7 @@
         <!-- Header -->
         <header class="text-center mb-10">
             <h1 class="text-4xl font-extrabold text-blue-800 tracking-tight">
-                <span role="img" aria-label="เครื่องบิน">✈️</span>
+                <span role="img" aria-label="เครื่องบิน"✈️</span>
                 นักวางแผนทริปฟรี
             </h1>
             <p id="user-info" class="mt-2 text-sm text-gray-500">กำลังโหลด...</p>
@@ -64,13 +64,13 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, arrayUnion, arrayRemove, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Global Firebase variables
         let app, db, auth;
         let userId = null;
         
-        // --- การแก้ไข: แทรกค่า Firebase Config ที่ผู้ใช้กำหนดไว้โดยตรงเป็น Fallback ---
+        // --- การตั้งค่า Fallback Config (ค่าที่คุณให้มา) ---
         const USER_FIREBASE_CONFIG = {
             apiKey: "AIzaSyA2utibWTXLU7iaWsqRwpALl5kBGzKojWA",
             authDomain: "travel-5f69c.firebaseapp.com",
@@ -80,23 +80,28 @@
             appId: "1:489721283623:web:70962180ef0468f8047a02",
             measurementId: "G-WFSXZTKZBD"
         };
-        // ---------------------------------------------------------------------------------
-
-        // 1. ดึงค่าจากตัวแปร Global หรือใช้ Fallback (การตั้งค่าที่ผู้ใช้ให้มา)
-        const LOCAL_APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         
-        let injectedConfig = {};
-        try {
-            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-                injectedConfig = JSON.parse(__firebase_config);
+        // 1. ตรวจสอบการตั้งค่าจาก Global (Canvas)
+        const injectedConfig = (() => {
+            try {
+                if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                    return JSON.parse(__firebase_config);
+                }
+            } catch(e) {
+                console.warn("Error parsing __firebase_config, using user's hardcoded fallback.");
             }
-        } catch(e) {
-            console.warn("Error parsing __firebase_config, using user's hardcoded fallback.");
-        }
+            return {};
+        })();
         
-        // ถ้า injectedConfig ไม่มีค่า (Object.keys(injectedConfig).length === 0) ให้ใช้ USER_FIREBASE_CONFIG แทน
+        // 2. ใช้ค่า Global ถ้ามี ไม่เช่นนั้นใช้ค่า Fallback
         const FIREBASE_CONFIG = Object.keys(injectedConfig).length > 0 ? injectedConfig : USER_FIREBASE_CONFIG;
         
+        // 3. กำหนด LOCAL_APP_ID โดยใช้ Project ID เป็น Fallback เมื่อรันภายนอก
+        //    (เพื่อให้ Path: /artifacts/{ProjectID}/users/{userId}/... ทำงานได้ดีขึ้น)
+        const LOCAL_APP_ID = typeof __app_id !== 'undefined' 
+            ? __app_id 
+            : FIREBASE_CONFIG.projectId || 'default-app-id';
+            
         const INITIAL_AUTH_TOKEN = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
 
@@ -127,9 +132,10 @@
         // --- Firebase Initialization and Authentication ---
         const initializeFirebase = async () => {
             try {
-                // Check if the final config object is empty
+                // *** การแก้ไข: เพิ่ม Debug Logging เพื่อช่วยในการวินิจฉัยปัญหา ***
+                setLogLevel('debug'); 
+                
                 if (Object.keys(FIREBASE_CONFIG).length === 0 || !FIREBASE_CONFIG.apiKey) {
-                     // This condition should now rarely be hit thanks to the fallback
                      messageBox.show('ข้อผิดพลาด', 'ไม่พบการตั้งค่า Firebase กรุณาตรวจสอบการกำหนดค่า');
                     return;
                 }
@@ -147,7 +153,8 @@
                         if (INITIAL_AUTH_TOKEN) {
                             await signInWithCustomToken(auth, INITIAL_AUTH_TOKEN);
                         } else {
-                            // Fallback to anonymous sign-in if token is missing (ใช้เมื่อโฮสต์เอง)
+                            // Fallback to anonymous sign-in (ใช้เมื่อรันบน GitHub Pages)
+                            console.log("No initial token, signing in anonymously.");
                             await signInAnonymously(auth);
                         }
                     }
@@ -415,7 +422,7 @@
         // Utility to remove the activity form and restore the original view
         const hideActivityForm = (dayIndex) => {
             const dayContainer = document.getElementById(`activities-${dayIndex}`).parentNode;
-            const formContainer = document.getElementById(`activity-form-container-${dayIndex}`);
+            const formContainer = document.getElementById(`activity-form-anchor-${dayIndex}`).querySelector(`#activity-form-container-${dayIndex}`);
             if (formContainer) {
                 formContainer.remove();
             }
@@ -503,8 +510,8 @@
                 renderTripList(trips);
                 document.getElementById('user-info').textContent = `ผู้ใช้ ID: ${userId} | แผนการเดินทางพร้อมใช้งาน`;
             }, (error) => {
-                console.error("Error loading trip list:", error);
-                messageBox.show('ข้อผิดพลาด', 'ไม่สามารถโหลดรายการแผนการเดินทางได้');
+                console.error("Error loading trip list (Firestore permission denied is common here):", error);
+                messageBox.show('ข้อผิดพลาด', 'ไม่สามารถโหลดรายการแผนการเดินทางได้ (อาจเป็นปัญหาด้านการอนุญาต)');
             });
         };
 
