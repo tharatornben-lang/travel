@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>โปรแกรมวางแผนการเดินทาง</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
+    <style>
+        /* Custom styles for Noto Sans Thai and Inter, focusing on readability */
+        :root {
+            font-family: 'Noto Sans Thai', 'Inter', sans-serif;
+        }
+        .container-shadow {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        /* Custom scrollbar for better aesthetics */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #9ca3af;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div id="app" class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        <!-- Header -->
+        <header class="text-center mb-10">
+            <h1 class="text-4xl font-extrabold text-blue-800 tracking-tight">
+                <span role="img" aria-label="เครื่องบิน">✈️</span>
+                นักวางแผนทริปฟรี
+            </h1>
+            <p id="user-info" class="mt-2 text-sm text-gray-500">กำลังโหลด...</p>
+        </header>
+
+        <!-- Main Content Area -->
+        <div id="content-area">
+            <!-- This area will be populated by JavaScript -->
+        </div>
+
+        <!-- Floating Message Box (Alert/Confirmation) -->
+        <div id="message-box" class="fixed inset-0 bg-gray-600 bg-opacity-75 hidden items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md">
+                <h3 id="msg-title" class="text-xl font-semibold text-gray-800 mb-3">ข้อความ</h3>
+                <p id="msg-body" class="text-gray-600 mb-6"></p>
+                <div id="msg-actions" class="flex justify-end space-x-3">
+                    <button id="msg-cancel" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition duration-150">ยกเลิก</button>
+                    <button id="msg-confirm" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition duration-150">ตกลง</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Firebase SDK Imports (MUST be in type="module") -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global Firebase variables
+        let app, db, auth;
+        let userId = null;
+        
+        // =================================================================================================
+        // *** คำแนะนำ: สำหรับใช้ภายนอก (บน GitHub Pages/เว็บไซต์ของคุณเอง) ***
+        // 1. แทนที่ค่าของ FIREBASE_CONFIG ด้วย JSON Object ที่คุณได้รับจาก Firebase Console
+        // 2. ให้ตั้งค่า INITIAL_AUTH_TOKEN เป็น null เพื่อให้ระบบเปลี่ยนไปใช้ signInAnonymously() แทน
+        // 3. ตั้งค่า LOCAL_APP_ID เป็นค่าใดก็ได้ที่คุณต้องการ (เช่น 'my-travel-app')
+        //
+        // ตัวอย่างการแก้ไข:
+         // ตัวอย่างการประกาศตัวแปรที่ไม่ขัดแย้ง:
+         // const LOCAL_APP_ID = '1:489721283623:web:70962180ef0468f8047a02';
+         // const FIREBASE_CONFIG = {
+         //    apiKey: "AIzaSyA2utibWTXLU7iaWsqRwpALl5kBGzKojWA",
+         //    authDomain: "travel-5f69c.firebaseapp.com",
+         //    projectId: "travel-5f69c",
+         //     storageBucket: "travel-5f69c.firebasestorage.app",
+         //     messagingSenderId: "489721283623",
+         //     appId: "1:489721283623:web:70962180ef0468f8047a02"
+         // };
+         // const INITIAL_AUTH_TOKEN = null;
+        // =================================================================================================
+        // แก้ไข: เปลี่ยนชื่อ APP_ID เป็น LOCAL_APP_ID เพื่อหลีกเลี่ยงข้อผิดพลาด 'already been declared'
+        const LOCAL_APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const FIREBASE_CONFIG = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const INITIAL_AUTH_TOKEN = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Utility: Custom Message Box (Replaces alert/confirm)
+        const messageBox = {
+            show: (title, body, isConfirm = false, onConfirm = () => {}, onCancel = () => {}) => {
+                document.getElementById('msg-title').textContent = title;
+                document.getElementById('msg-body').textContent = body;
+                const box = document.getElementById('message-box');
+                const confirmBtn = document.getElementById('msg-confirm');
+                const cancelBtn = document.getElementById('msg-cancel');
+                
+                cancelBtn.onclick = () => { onCancel(); box.classList.add('hidden'); box.classList.remove('flex'); };
+                
+                if (isConfirm) {
+                    cancelBtn.classList.remove('hidden');
+                    confirmBtn.onclick = () => { onConfirm(); box.classList.add('hidden'); box.classList.remove('flex'); };
+                } else {
+                    cancelBtn.classList.add('hidden');
+                    confirmBtn.onclick = () => { box.classList.add('hidden'); box.classList.remove('flex'); };
+                }
+
+                box.classList.add('flex');
+                box.classList.remove('hidden');
+            }
+        };
+
+        // --- Firebase Initialization and Authentication ---
+        const initializeFirebase = async () => {
+            try {
+                if (Object.keys(FIREBASE_CONFIG).length === 0) {
+                     messageBox.show('ข้อผิดพลาด', 'ไม่พบการตั้งค่า Firebase กรุณาตรวจสอบการกำหนดค่า');
+                    // *** คำแนะนำ: หากคุณแก้ไข FIREBASE_CONFIG แล้วแต่ยังเกิดปัญหานี้, ให้ตรวจสอบว่าคุณใส่
+                    //     JSON Object ที่ถูกต้องหรือไม่ (ไม่ใช่มันถูกตั้งเป็น {} ในโค้ดของคุณ)
+                    return;
+                }
+                app = initializeApp(FIREBASE_CONFIG);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('user-info').textContent = `ผู้ใช้ ID: ${userId} | กำลังโหลดแผน...`;
+                        loadTripList();
+                    } else {
+                        // Sign in
+                        if (INITIAL_AUTH_TOKEN) {
+                            await signInWithCustomToken(auth, INITIAL_AUTH_TOKEN);
+                        } else {
+                            // Fallback to anonymous sign-in if token is missing (ใช้เมื่อโฮสต์เอง)
+                            await signInAnonymously(auth);
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error("Error during Firebase initialization or sign-in:", error);
+                messageBox.show('ข้อผิดพลาด', `เกิดข้อผิดพลาดในการเชื่อมต่อ Firebase: ${error.message}`);
+            }
+        };
+        
+        // Path for storing private user data
+        // แก้ไข: ใช้ LOCAL_APP_ID แทน APP_ID
+        const getCollectionPath = () => `/artifacts/${LOCAL_APP_ID}/users/${userId}/travel_plans`;
+
+        // --- State and View Management ---
+        let currentTrip = null; // Stores the currently selected trip object
+        let currentTripDocId = null; // Stores the Firestore document ID
+        
+        // Utility function to format currency
+        const formatCurrency = (amount) => {
+            return (amount || 0).toLocaleString('th-TH', { style: 'currency', currency: 'THB', minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        };
+
+        // Renders the list of all trips
+        const renderTripList = (trips) => {
+            const contentArea = document.getElementById('content-area');
+            contentArea.innerHTML = `
+                <div class="bg-white p-6 rounded-xl container-shadow">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4">รายการแผนการเดินทางของฉัน</h2>
+                    <div id="trip-list" class="space-y-4 mb-6">
+                        ${trips.length === 0 ? '<p class="text-gray-500">คุณยังไม่มีแผนการเดินทาง ลองสร้างแผนใหม่เลย!</p>' : ''}
+                    </div>
+                    <button id="new-trip-btn" class="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition duration-150 flex items-center justify-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        สร้างแผนการเดินทางใหม่
+                    </button>
+                </div>
+            `;
+            
+            // Attach click handlers to trip cards and the new trip button
+            document.getElementById('new-trip-btn').onclick = () => renderTripForm();
+            trips.forEach(trip => {
+                const tripCard = document.createElement('div');
+                tripCard.className = 'flex items-center justify-between p-4 bg-gray-50 border border-gray-200 rounded-lg transition duration-150 hover:bg-blue-50';
+                tripCard.innerHTML = `
+                    <div>
+                        <p class="text-lg font-semibold text-gray-900">${trip.name} (${trip.province})</p>
+                        <p class="text-sm text-gray-500">${trip.startDate} ถึง ${trip.endDate}</p>
+                    </div>
+                    <div class="space-x-2 flex">
+                        <button data-id="${trip.id}" class="view-trip-btn text-sm font-medium text-blue-600 hover:text-blue-800 transition duration-150 p-2 rounded-lg hover:bg-blue-200">
+                            ดูแผน
+                        </button>
+                        <button data-id="${trip.id}" class="delete-trip-btn text-sm font-medium text-red-600 hover:text-red-800 transition duration-150 p-2 rounded-lg hover:bg-red-200">
+                            ลบ
+                        </button>
+                    </div>
+                `;
+                document.getElementById('trip-list').appendChild(tripCard);
+            });
+
+            document.querySelectorAll('.view-trip-btn').forEach(btn => {
+                btn.onclick = (e) => loadTripDetails(e.target.dataset.id);
+            });
+            document.querySelectorAll('.delete-trip-btn').forEach(btn => {
+                btn.onclick = (e) => messageBox.show(
+                    'ยืนยันการลบ', 
+                    'คุณแน่ใจหรือไม่ที่จะลบแผนการเดินทางนี้ ข้อมูลทั้งหมดจะหายไป', 
+                    true, 
+                    () => deleteTrip(e.target.dataset.id)
+                );
+            });
+        };
+
+        // Renders the form to create a new trip
+        const renderTripForm = () => {
+            const contentArea = document.getElementById('content-area');
+            contentArea.innerHTML = `
+                <div class="bg-white p-6 rounded-xl container-shadow max-w-lg mx-auto">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-6">สร้างแผนการเดินทางใหม่</h2>
+                    <form id="trip-form" class="space-y-4">
+                        <div>
+                            <label for="trip-name" class="block text-sm font-medium text-gray-700">ชื่อทริป</label>
+                            <input type="text" id="trip-name" required class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border" placeholder="เช่น ทริปแอ่วเหนือเชียงใหม่">
+                        </div>
+                        <div>
+                            <label for="trip-province" class="block text-sm font-medium text-gray-700">จังหวัด/สถานที่ปลายทาง</label>
+                            <input type="text" id="trip-province" required class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border" placeholder="เช่น เชียงใหม่, ภูเก็ต">
+                        </div>
+                        <div>
+                            <label for="start-date" class="block text-sm font-medium text-gray-700">วันที่เริ่มต้น</label>
+                            <input type="date" id="start-date" required class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border">
+                        </div>
+                        <div>
+                            <label for="end-date" class="block text-sm font-medium text-gray-700">วันที่สิ้นสุด</label>
+                            <input type="date" id="end-date" required class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border">
+                        </div>
+                        <div class="flex justify-end space-x-3 pt-2">
+                            <button type="button" id="cancel-form-btn" class="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 font-medium transition duration-150">ยกเลิก</button>
+                            <button type="submit" class="px-5 py-2 bg-green-600 text-white rounded-lg shadow-md hover:bg-green-700 font-medium transition duration-150">
+                                บันทึกแผน
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            document.getElementById('cancel-form-btn').onclick = () => loadTripList();
+            document.getElementById('trip-form').onsubmit = handleSaveTrip;
+        };
+
+        // Renders the detailed itinerary view
+        const renderItinerary = () => {
+            if (!currentTrip || !currentTripDocId) {
+                loadTripList(); // Go back if no trip is selected
+                return;
+            }
+            
+            // Calculate overall trip total cost
+            let tripTotalCost = 0;
+            currentTrip.days.forEach(day => {
+                day.activities.forEach(activity => {
+                    tripTotalCost += activity.cost || 0;
+                });
+            });
+            const tripTotalFormatted = formatCurrency(tripTotalCost);
+
+
+            const contentArea = document.getElementById('content-area');
+            contentArea.innerHTML = `
+                <div class="mb-6 flex justify-between items-center pb-4 border-b border-gray-200">
+                    <h2 class="text-3xl font-bold text-gray-800">${currentTrip.name}
+                        <span class="block text-base font-normal text-blue-600">สู่ ${currentTrip.province} | ${currentTrip.startDate} - ${currentTrip.endDate}</span>
+                    </h2>
+                    <button id="back-to-list-btn" class="flex items-center px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition duration-150">
+                        <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                        กลับไปที่รายการ
+                    </button>
+                </div>
+                
+                <!-- Expense Dashboard Summary -->
+                <div class="bg-blue-100 p-4 rounded-xl shadow-inner mb-6 flex items-center justify-between">
+                    <div>
+                        <h3 class="text-xl font-bold text-blue-800">ภาพรวมค่าใช้จ่ายทั้งทริป</h3>
+                        <p class="text-sm text-blue-700 mt-1">ยอดรวมค่าใช้จ่ายที่บันทึกไว้สำหรับทุกกิจกรรม</p>
+                    </div>
+                    <p class="text-4xl font-extrabold text-red-700">
+                        ${tripTotalFormatted}
+                    </p>
+                </div>
+
+                <div id="days-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Daily Itineraries will be injected here -->
+                </div>
+            `;
+
+            document.getElementById('back-to-list-btn').onclick = () => {
+                // Remove the snapshot listener before going back
+                if (currentTrip.unsubscribe) currentTrip.unsubscribe();
+                currentTrip = null;
+                currentTripDocId = null;
+                loadTripList();
+            };
+
+            const container = document.getElementById('days-container');
+            currentTrip.days.forEach((dayData, dayIndex) => {
+                
+                // Calculate daily total cost for the summary
+                const dailyTotal = dayData.activities.reduce((sum, activity) => sum + (activity.cost || 0), 0);
+                const dailyTotalFormatted = formatCurrency(dailyTotal);
+
+                const dayCard = document.createElement('div');
+                dayCard.className = 'bg-white p-5 rounded-xl container-shadow flex flex-col h-full';
+                dayCard.innerHTML = `
+                    <h3 class="text-xl font-semibold text-blue-700 mb-4 border-b pb-2">
+                        วันที่ ${dayIndex + 1} (${dayData.date})
+                    </h3>
+                    <div id="activity-form-anchor-${dayIndex}">
+                        <!-- Activity form will be rendered here if active -->
+                    </div>
+                    <div id="activities-${dayIndex}" class="flex-grow space-y-3 custom-scrollbar overflow-y-auto pr-2">
+                        <!-- Activities -->
+                    </div>
+                    <!-- Daily Expense Summary -->
+                    <div class="mt-4 pt-3 border-t border-gray-100">
+                        <p class="text-lg font-bold text-red-600">
+                            รวมค่าใช้จ่ายวันนี้: ${dailyTotalFormatted}
+                        </p>
+                    </div>
+                    <button data-day-index="${dayIndex}" class="add-activity-btn mt-4 py-2 bg-green-500 text-white font-medium rounded-lg hover:bg-green-600 transition duration-150">
+                        + เพิ่มกิจกรรม
+                    </button>
+                `;
+                container.appendChild(dayCard);
+                renderActivities(dayIndex, dayData.activities);
+            });
+
+            document.querySelectorAll('.add-activity-btn').forEach(btn => {
+                btn.onclick = (e) => {
+                    const dayIndex = parseInt(e.target.dataset.dayIndex);
+                    renderActivityForm(dayIndex); // No activityIndex means create mode
+                };
+            });
+        };
+
+        // Renders the activities for a specific day
+        const renderActivities = (dayIndex, activities) => {
+            const activitiesContainer = document.getElementById(`activities-${dayIndex}`);
+            activitiesContainer.innerHTML = ''; // Clear previous activities
+
+            if (activities.length === 0) {
+                activitiesContainer.innerHTML = '<p class="text-gray-400 text-sm italic">ยังไม่มีกิจกรรมในวันนี้</p>';
+                return;
+            }
+
+            activities.sort((a, b) => (a.time || '23:59').localeCompare(b.time || '23:59'));
+
+            activities.forEach((activity, activityIndex) => {
+                const cost = activity.cost || 0; // Ensure cost exists
+                
+                const activityItem = document.createElement('div');
+                activityItem.className = 'bg-gray-100 p-3 rounded-lg border-l-4 border-blue-500 flex justify-between items-start space-x-3';
+                activityItem.innerHTML = `
+                    <div class="flex-grow">
+                        <p class="text-lg font-bold text-gray-800">${activity.time} - ${activity.name}</p>
+                        <p class="text-sm text-gray-600">${activity.notes || 'ไม่มีบันทึกย่อ'}</p>
+                        <!-- Display Cost -->
+                        <p class="text-sm font-semibold text-red-600 mt-1">ค่าใช้จ่าย: ${formatCurrency(cost)}</p>
+                    </div>
+                    <div class="flex space-x-1 flex-shrink-0">
+                        <!-- NEW: Edit Button -->
+                        <button data-day-index="${dayIndex}" data-activity-index="${activityIndex}" class="edit-activity-btn text-blue-500 hover:text-blue-700 p-1 rounded-full hover:bg-blue-100 transition duration-150" title="แก้ไข">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                        </button>
+                        <!-- Delete Button -->
+                        <button data-day-index="${dayIndex}" data-activity-index="${activityIndex}" class="delete-activity-btn text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100 transition duration-150" title="ลบ">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    </div>
+                `;
+                activitiesContainer.appendChild(activityItem);
+            });
+
+            document.querySelectorAll('.edit-activity-btn').forEach(btn => {
+                btn.onclick = (e) => {
+                    const dayIndex = parseInt(e.currentTarget.dataset.dayIndex);
+                    const activityIndex = parseInt(e.currentTarget.dataset.activityIndex);
+                    renderActivityForm(dayIndex, activityIndex); // Pass activityIndex for editing
+                };
+            });
+
+            document.querySelectorAll('.delete-activity-btn').forEach(btn => {
+                btn.onclick = (e) => {
+                    const dayIndex = parseInt(e.currentTarget.dataset.dayIndex);
+                    const activityIndex = parseInt(e.currentTarget.dataset.activityIndex);
+                    messageBox.show(
+                        'ยืนยันการลบกิจกรรม', 
+                        `คุณแน่ใจหรือไม่ที่จะลบกิจกรรม "${activities[activityIndex].name}"?`, 
+                        true, 
+                        () => deleteActivity(dayIndex, activityIndex)
+                    );
+                };
+            });
+        };
+
+        // Utility to remove the activity form and restore the original view
+        const hideActivityForm = (dayIndex) => {
+            const dayContainer = document.getElementById(`activities-${dayIndex}`).parentNode;
+            const formContainer = document.getElementById(`activity-form-container-${dayIndex}`);
+            if (formContainer) {
+                formContainer.remove();
+            }
+            dayContainer.querySelector('.add-activity-btn').classList.remove('hidden');
+            dayContainer.querySelector(`#activities-${dayIndex}`).classList.remove('hidden');
+        };
+
+        // Renders the form to add or edit an activity
+        const renderActivityForm = (dayIndex, activityIndex = null) => {
+            const dayContainer = document.getElementById(`activities-${dayIndex}`).parentNode;
+            const formAnchor = document.getElementById(`activity-form-anchor-${dayIndex}`);
+            const date = currentTrip.days[dayIndex].date;
+
+            const isEditing = activityIndex !== null;
+            const activityToEdit = isEditing ? currentTrip.days[dayIndex].activities[activityIndex] : {};
+
+            // Hide main content and add button
+            dayContainer.querySelector('.add-activity-btn').classList.add('hidden');
+            dayContainer.querySelector(`#activities-${dayIndex}`).classList.add('hidden');
+            
+            // Remove any existing form to prevent duplication
+            hideActivityForm(dayIndex); 
+
+            const formTitle = isEditing 
+                ? `แก้ไขกิจกรรมวันที่ ${dayIndex + 1} (${date})` 
+                : `เพิ่มกิจกรรมวันที่ ${dayIndex + 1} (${date})`;
+            const submitText = isEditing ? 'อัปเดตกิจกรรม' : 'บันทึกกิจกรรม';
+
+            const formHtml = `
+                <div id="activity-form-container-${dayIndex}" class="p-4 bg-blue-50 rounded-lg mb-4 border border-blue-200">
+                    <h4 class="font-semibold text-blue-800 mb-3">${formTitle}</h4>
+                    <form id="activity-form-${dayIndex}" class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700">เวลา (ระบุชั่วโมงและนาที เช่น 14:30)</label>
+                            <input type="time" id="activity-time-${dayIndex}" required class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-2 border" 
+                                value="${activityToEdit.time || ''}">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700">ชื่อกิจกรรม/สถานที่</label>
+                            <input type="text" id="activity-name-${dayIndex}" required class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-2 border" placeholder="เช่น วัดพระธาตุดอยสุเทพ, ทานอาหารกลางวัน"
+                                value="${activityToEdit.name || ''}">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700">ค่าใช้จ่าย (บาท)</label>
+                            <input type="number" id="activity-cost-${dayIndex}" min="0" 
+                                value="${activityToEdit.cost || 0}" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-2 border" placeholder="เช่น 500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700">บันทึกย่อ/รายละเอียด</label>
+                            <textarea id="activity-notes-${dayIndex}" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-2 border" rows="2" placeholder="เช่น ค่าเข้า 40 บาท, เตรียมเสื้อกันหนาว">${activityToEdit.notes || ''}</textarea>
+                        </div>
+                        <div class="flex justify-end space-x-2 pt-2">
+                            <button type="button" class="cancel-activity-form px-3 py-1 text-sm text-gray-700 rounded-lg hover:bg-gray-200 font-medium transition duration-150">ยกเลิก</button>
+                            <button type="submit" class="px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition duration-150">${submitText}</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            formAnchor.innerHTML = formHtml; // Insert form at the anchor point
+            
+            // Attach event handlers
+            dayContainer.querySelector('.cancel-activity-form').onclick = () => hideActivityForm(dayIndex);
+
+            // Use the unified submit handler
+            document.getElementById(`activity-form-${dayIndex}`).onsubmit = (e) => handleActivityFormSubmit(e, dayIndex, activityIndex);
+        };
+
+        // --- Firebase Data Operations ---
+
+        // Real-time listener for the list of trips (unchanged)
+        const loadTripList = () => {
+            if (!db || !userId) return;
+
+            const q = collection(db, getCollectionPath());
+            
+            if (typeof loadTripList.unsubscribe === 'function') {
+                loadTripList.unsubscribe();
+            }
+
+            loadTripList.unsubscribe = onSnapshot(q, (snapshot) => {
+                const trips = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                renderTripList(trips);
+                document.getElementById('user-info').textContent = `ผู้ใช้ ID: ${userId} | แผนการเดินทางพร้อมใช้งาน`;
+            }, (error) => {
+                console.error("Error loading trip list:", error);
+                messageBox.show('ข้อผิดพลาด', 'ไม่สามารถโหลดรายการแผนการเดินทางได้');
+            });
+        };
+
+        // Loads a specific trip's details and sets up a listener (unchanged)
+        const loadTripDetails = (docId) => {
+            if (!db || !userId) return;
+
+            if (currentTrip && typeof currentTrip.unsubscribe === 'function') {
+                currentTrip.unsubscribe();
+            }
+            
+            currentTripDocId = docId;
+            const tripRef = doc(db, getCollectionPath(), docId);
+
+            let unsubscribeFn;
+
+            unsubscribeFn = onSnapshot(tripRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    currentTrip = docSnap.data();
+                    currentTrip.unsubscribe = unsubscribeFn; 
+                    renderItinerary();
+                } else {
+                    messageBox.show('ไม่พบข้อมูล', 'ไม่พบแผนการเดินทางนี้ อาจถูกลบไปแล้ว');
+                    loadTripList(); // Go back to list
+                }
+            }, (error) => {
+                console.error("Error loading trip details:", error);
+                messageBox.show('ข้อผิดพลาด', 'ไม่สามารถโหลดรายละเอียดแผนการเดินทางได้');
+            });
+        };
+
+        // Handles creating a new trip document (unchanged)
+        const handleSaveTrip = async (e) => {
+            e.preventDefault();
+            if (!db || !userId) return;
+
+            const name = document.getElementById('trip-name').value.trim();
+            const province = document.getElementById('trip-province').value.trim();
+            const startDateStr = document.getElementById('start-date').value;
+            const endDateStr = document.getElementById('end-date').value;
+
+            if (new Date(startDateStr) > new Date(endDateStr)) {
+                messageBox.show('ข้อมูลไม่ถูกต้อง', 'วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด');
+                return;
+            }
+
+            const tripData = {
+                name,
+                province,
+                startDate: startDateStr,
+                endDate: endDateStr,
+                createdAt: new Date(),
+                days: generateDayObjects(startDateStr, endDateStr)
+            };
+
+            try {
+                await addDoc(collection(db, getCollectionPath()), tripData);
+                messageBox.show('สำเร็จ', 'บันทึกแผนการเดินทางใหม่เรียบร้อยแล้ว');
+            } catch (error) {
+                console.error("Error saving trip:", error);
+                messageBox.show('ข้อผิดพลาด', `เกิดข้อผิดพลาดในการบันทึก: ${error.message}`);
+            }
+        };
+
+        // Generates the structure for days between start and end date (unchanged)
+        const generateDayObjects = (startDateStr, endDateStr) => {
+            const days = [];
+            let currentDate = new Date(startDateStr);
+            const endDate = new Date(endDateStr);
+
+            while (currentDate <= endDate) {
+                const dateStr = currentDate.toISOString().split('T')[0];
+                days.push({ date: dateStr, activities: [] });
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+            return days;
+        };
+
+        // NEW: Unified Handler for Creating and Updating Activities
+        const handleActivityFormSubmit = async (e, dayIndex, activityIndex = null) => {
+            e.preventDefault();
+            if (!db || !userId || !currentTripDocId) return;
+
+            const time = document.getElementById(`activity-time-${dayIndex}`).value;
+            const name = document.getElementById(`activity-name-${dayIndex}`).value.trim();
+            const notes = document.getElementById(`activity-notes-${dayIndex}`).value.trim();
+            const cost = parseFloat(document.getElementById(`activity-cost-${dayIndex}`).value) || 0; 
+
+            if (!time || !name) {
+                messageBox.show('ข้อมูลไม่สมบูรณ์', 'โปรดระบุเวลาและชื่อกิจกรรม');
+                return;
+            }
+
+            const newActivity = { time, name, notes, cost };
+            
+            try {
+                const updatedDays = JSON.parse(JSON.stringify(currentTrip.days));
+                const action = activityIndex === null ? 'บันทึก' : 'อัปเดต';
+
+                if (activityIndex !== null) {
+                    // Editing: Replace the existing activity object at the index
+                    updatedDays[dayIndex].activities[activityIndex] = newActivity;
+                } else {
+                    // Creating: Push a new activity object
+                    updatedDays[dayIndex].activities.push(newActivity);
+                }
+
+                const tripRef = doc(db, getCollectionPath(), currentTripDocId);
+                await updateDoc(tripRef, { days: updatedDays });
+                
+                messageBox.show('สำเร็จ', `${action}กิจกรรมเรียบร้อยแล้ว`);
+
+                // Hide the form and restore original view
+                hideActivityForm(dayIndex);
+                
+            } catch (error) {
+                console.error("Error saving/updating activity:", error);
+                messageBox.show('ข้อผิดพลาด', `เกิดข้อผิดพลาดในการ${action}กิจกรรม: ${error.message}`);
+            }
+        };
+
+        // Handles deleting an activity (unchanged)
+        const deleteActivity = async (dayIndex, activityIndex) => {
+            if (!db || !userId || !currentTripDocId) return;
+
+            try {
+                const updatedDays = JSON.parse(JSON.stringify(currentTrip.days));
+                updatedDays[dayIndex].activities.splice(activityIndex, 1);
+
+                const tripRef = doc(db, getCollectionPath(), currentTripDocId);
+                await updateDoc(tripRef, { days: updatedDays });
+
+            } catch (error) {
+                console.error("Error deleting activity:", error);
+                messageBox.show('ข้อผิดพลาด', `เกิดข้อผิดพลาดในการลบกิจกรรม: ${error.message}`);
+            }
+        };
+
+        // Handles deleting an entire trip (unchanged)
+        const deleteTrip = async (docId) => {
+            if (!db || !userId) return;
+
+            try {
+                await deleteDoc(doc(db, getCollectionPath(), docId));
+                messageBox.show('สำเร็จ', 'ลบแผนการเดินทางเรียบร้อยแล้ว');
+            } catch (error) {
+                console.error("Error deleting trip:", error);
+                messageBox.show('ข้อผิดพลาด', `เกิดข้อผิดพลาดในการลบแผน: ${error.message}`);
+            }
+        };
+
+        // --- Start Application ---
+        window.onload = initializeFirebase;
+    </script>
+</body>
+</html>
