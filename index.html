@@ -70,29 +70,35 @@
         let app, db, auth;
         let userId = null;
         
-        // =================================================================================================
-        // *** คำแนะนำ: สำหรับใช้ภายนอก (บน GitHub Pages/เว็บไซต์ของคุณเอง) ***
-        // 1. แทนที่ค่าของ FIREBASE_CONFIG ด้วย JSON Object ที่คุณได้รับจาก Firebase Console
-        // 2. ให้ตั้งค่า INITIAL_AUTH_TOKEN เป็น null เพื่อให้ระบบเปลี่ยนไปใช้ signInAnonymously() แทน
-        // 3. ตั้งค่า LOCAL_APP_ID เป็นค่าใดก็ได้ที่คุณต้องการ (เช่น 'my-travel-app')
-        //
-        // ตัวอย่างการแก้ไข:
-         // ตัวอย่างการประกาศตัวแปรที่ไม่ขัดแย้ง:
-          const LOCAL_APP_ID = '1:489721283623:web:70962180ef0468f8047a02';
-          const FIREBASE_CONFIG = {
-             apiKey: "AIzaSyA2utibWTXLU7iaWsqRwpALl5kBGzKojWA",
-             authDomain: "travel-5f69c.firebaseapp.com",
-             projectId: "travel-5f69c",
-              storageBucket: "travel-5f69c.firebasestorage.app",
-              messagingSenderId: "489721283623",
-              appId: "1:489721283623:web:70962180ef0468f8047a02"
-          };
-          const INITIAL_AUTH_TOKEN = null;
-        // =================================================================================================
-        // แก้ไข: เปลี่ยนชื่อ APP_ID เป็น LOCAL_APP_ID เพื่อหลีกเลี่ยงข้อผิดพลาด 'already been declared'
+        // --- การแก้ไข: แทรกค่า Firebase Config ที่ผู้ใช้กำหนดไว้โดยตรงเป็น Fallback ---
+        const USER_FIREBASE_CONFIG = {
+            apiKey: "AIzaSyA2utibWTXLU7iaWsqRwpALl5kBGzKojWA",
+            authDomain: "travel-5f69c.firebaseapp.com",
+            projectId: "travel-5f69c",
+            storageBucket: "travel-5f69c.firebasestorage.app",
+            messagingSenderId: "489721283623",
+            appId: "1:489721283623:web:70962180ef0468f8047a02",
+            measurementId: "G-WFSXZTKZBD"
+        };
+        // ---------------------------------------------------------------------------------
+
+        // 1. ดึงค่าจากตัวแปร Global หรือใช้ Fallback (การตั้งค่าที่ผู้ใช้ให้มา)
         const LOCAL_APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const FIREBASE_CONFIG = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        
+        let injectedConfig = {};
+        try {
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                injectedConfig = JSON.parse(__firebase_config);
+            }
+        } catch(e) {
+            console.warn("Error parsing __firebase_config, using user's hardcoded fallback.");
+        }
+        
+        // ถ้า injectedConfig ไม่มีค่า (Object.keys(injectedConfig).length === 0) ให้ใช้ USER_FIREBASE_CONFIG แทน
+        const FIREBASE_CONFIG = Object.keys(injectedConfig).length > 0 ? injectedConfig : USER_FIREBASE_CONFIG;
+        
         const INITIAL_AUTH_TOKEN = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
 
         // Utility: Custom Message Box (Replaces alert/confirm)
         const messageBox = {
@@ -121,10 +127,10 @@
         // --- Firebase Initialization and Authentication ---
         const initializeFirebase = async () => {
             try {
-                if (Object.keys(FIREBASE_CONFIG).length === 0) {
+                // Check if the final config object is empty
+                if (Object.keys(FIREBASE_CONFIG).length === 0 || !FIREBASE_CONFIG.apiKey) {
+                     // This condition should now rarely be hit thanks to the fallback
                      messageBox.show('ข้อผิดพลาด', 'ไม่พบการตั้งค่า Firebase กรุณาตรวจสอบการกำหนดค่า');
-                    // *** คำแนะนำ: หากคุณแก้ไข FIREBASE_CONFIG แล้วแต่ยังเกิดปัญหานี้, ให้ตรวจสอบว่าคุณใส่
-                    //     JSON Object ที่ถูกต้องหรือไม่ (ไม่ใช่มันถูกตั้งเป็น {} ในโค้ดของคุณ)
                     return;
                 }
                 app = initializeApp(FIREBASE_CONFIG);
@@ -154,7 +160,6 @@
         };
         
         // Path for storing private user data
-        // แก้ไข: ใช้ LOCAL_APP_ID แทน APP_ID
         const getCollectionPath = () => `/artifacts/${LOCAL_APP_ID}/users/${userId}/travel_plans`;
 
         // --- State and View Management ---
@@ -656,4 +661,3 @@
     </script>
 </body>
 </html>
-
