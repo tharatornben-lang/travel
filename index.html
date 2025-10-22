@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>โปรแกรมวางแผนการเดินทาง</title>
-    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Load Inter Font -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Noto+Sans+Thai:wght@100..900&display=swap" rel="stylesheet">
     <style>
         /* Custom styles for Noto Sans Thai and Inter, focusing on readability */
@@ -25,42 +23,45 @@
             border-radius: 10px;
         }
         .custom-scrollbar::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 10px;
+            background-color: #f3f4f6;
+        }
+        /* Full screen overlay for message box */
+        #message-box {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 50;
         }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen">
-    <div id="app" class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
-        <!-- Header -->
-        <header class="text-center mb-10">
-            <h1 class="text-4xl font-extrabold text-blue-800 tracking-tight">
-                <span role="img" aria-label="เครื่องบิน">✈️</span>
-                นักวางแผนทริปแบบร่วมมือ
-            </h1>
-            <p id="user-info" class="mt-2 text-sm text-gray-500">กำลังโหลด...</p>
-        </header>
+<body class="bg-gray-100 min-h-screen p-4 md:p-8">
 
-        <!-- Main Content Area -->
-        <div id="content-area">
-            <!-- This area will be populated by JavaScript -->
+    <header class="max-w-6xl mx-auto mb-6">
+        <h1 class="text-4xl font-extrabold text-gray-900 mb-2">Trip Planner 🌍</h1>
+        <p id="user-info" class="text-sm text-gray-600">กำลังเชื่อมต่อ...</p>
+    </header>
+
+    <main id="content-area" class="max-w-6xl mx-auto space-y-6">
+        <div class="bg-white p-6 rounded-xl container-shadow flex items-center justify-center h-48">
+            <p class="text-xl text-gray-500 animate-pulse">กำลังโหลดข้อมูลแผนการเดินทาง...</p>
         </div>
+    </main>
 
-        <!-- Floating Message Box (Alert/Confirmation) -->
-        <div id="message-box" class="fixed inset-0 bg-gray-600 bg-opacity-75 hidden items-center justify-center p-4 z-50">
-            <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md">
-                <h3 id="msg-title" class="text-xl font-semibold text-gray-800 mb-3">ข้อความ</h3>
-                <p id="msg-body" class="text-gray-600 mb-6"></p>
-                <div id="msg-actions" class="flex justify-end space-x-3">
-                    <button id="msg-cancel" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition duration-150">ยกเลิก</button>
-                    <button id="msg-confirm" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition duration-150">ตกลง</button>
-                </div>
+    <div id="message-box" class="hidden items-center justify-center">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full">
+            <h3 id="msg-title" class="text-xl font-bold text-gray-800 mb-3">ข้อความ</h3>
+            <p id="msg-body" class="text-gray-600 mb-6">เนื้อหาข้อความ</p>
+            <div class="flex justify-end space-x-3">
+                <button id="msg-cancel" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 font-medium transition duration-150 hidden">ยกเลิก</button>
+                <button id="msg-confirm" class="px-4 py-2 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 font-medium transition duration-150">ตกลง</button>
             </div>
         </div>
-
     </div>
 
-    <!-- Firebase SDK Imports (MUST be in type="module") -->
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -70,9 +71,8 @@
         let app, db, auth;
         let userId = null;
         
-        // --- การตั้งค่า Fallback Config ---
-        // *** SECURITY FIX: เราแทนที่คีย์จริงด้วย Placeholder เพื่อป้องกันการแจ้งเตือนจาก GitHub ***
-        // *** เมื่อรันโค้ดภายนอก Canvas (เช่น บน GitHub Pages) คุณต้องแทนที่ค่าต่อไปนี้ด้วยคีย์จริงของคุณ ***
+        // --- การตั้งค่า Fallback Config (ค่าที่คุณให้มา) ---
+        // NOTE: หากคุณกำลังรันโค้ดนี้บน Canvas จริง ข้อมูลนี้จะถูกแทนที่ด้วยข้อมูลของ Canvas โดยอัตโนมัติ
         const USER_FIREBASE_CONFIG = {
             apiKey: "AIzaSyA2utibWTXLU7iaWsqRwpALl5kBGzKojWA", // <<< โปรดแทนที่คีย์นี้ด้วยคีย์จริงถ้าคุณรันเอง
             authDomain: "travel-5f69c.firebaseapp.com",
@@ -133,26 +133,13 @@
         // --- Firebase Initialization and Authentication ---
         const initializeFirebase = async () => {
             try {
-                // เพิ่ม Debug Logging และ Log config ที่ใช้
+                // *** การแก้ไข: เพิ่ม Debug Logging เพื่อช่วยในการวินิจฉัยปัญหา ***
                 setLogLevel('debug'); 
-                console.log("Firebase Config ที่กำลังใช้:", FIREBASE_CONFIG);
                 
-                // *** การตรวจสอบที่เพิ่มเข้ามาเพื่อจัดการกับข้อผิดพลาด "auth/configuration-not-found" ***
-                if (!FIREBASE_CONFIG.apiKey || !FIREBASE_CONFIG.projectId) {
-                    const errorMsg = 'ไม่พบค่า apiKey หรือ projectId ในการตั้งค่า Firebase กรุณาตรวจสอบว่าคุณใส่ Firebase Config ที่ถูกต้อง';
-                    console.error(errorMsg);
-                    messageBox.show('ข้อผิดพลาดการตั้งค่า', errorMsg);
+                if (Object.keys(FIREBASE_CONFIG).length === 0 || !FIREBASE_CONFIG.apiKey) {
+                     messageBox.show('ข้อผิดพลาด', 'ไม่พบการตั้งค่า Firebase กรุณาตรวจสอบการกำหนดค่า');
                     return;
                 }
-                
-                // ตรวจสอบ Placeholder Key เมื่อรันนอก Canvas
-                if (FIREBASE_CONFIG.apiKey === "YOUR_ACTUAL_FIREBASE_API_KEY_HERE" && Object.keys(injectedConfig).length === 0) {
-                     const errorMsg = 'กรุณาแทนที่ YOUR_ACTUAL_FIREBASE_API_KEY_HERE ด้วยคีย์จริงของคุณเมื่อรันนอก Canvas';
-                     console.error(errorMsg);
-                     messageBox.show('ข้อผิดพลาดการตั้งค่า', errorMsg);
-                     return;
-                }
-
                 app = initializeApp(FIREBASE_CONFIG);
                 db = getFirestore(app);
                 auth = getAuth(app);
@@ -160,15 +147,14 @@
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
-                        document.getElementById('user-info').textContent = `ผู้ใช้ ID: ${userId} | กำลังโหลดแผนร่วมกัน... (ทุกคนสามารถแก้ไขได้)`;
+                        document.getElementById('user-info').textContent = `ผู้ใช้ ID: ${userId} | กำลังโหลดแผน...`;
                         loadTripList();
                     } else {
                         // Sign in
                         if (INITIAL_AUTH_TOKEN) {
-                            // ใช้ Custom Token เมื่อรันใน Canvas
                             await signInWithCustomToken(auth, INITIAL_AUTH_TOKEN);
                         } else {
-                            // Fallback to anonymous sign-in 
+                            // Fallback to anonymous sign-in (ใช้เมื่อรันบน GitHub Pages หรือรันภายนอก)
                             console.log("No initial token, signing in anonymously.");
                             await signInAnonymously(auth);
                         }
@@ -177,23 +163,22 @@
 
             } catch (error) {
                 console.error("Error during Firebase initialization or sign-in:", error);
-                if (error.code === 'auth/configuration-not-found') {
-                    messageBox.show('ข้อผิดพลาดการเชื่อมต่อ', 
-                        `เกิดข้อผิดพลาดในการเชื่อมต่อ: ${error.message}
-                        โปรดตรวจสอบ 2 สิ่ง: 1. API Key ในโค้ดถูกต้องหรือไม่ 2. คุณได้เปิดใช้งาน Anonymous Sign-in ใน Firebase Console หรือยัง?`);
-                } else {
-                    messageBox.show('ข้อผิดพลาด', `เกิดข้อผิดพลาดในการเชื่อมต่อ Firebase: ${error.message}`);
-                }
+                messageBox.show('ข้อผิดพลาด', `เกิดข้อผิดพลาดในการเชื่อมต่อ Firebase: ${error.message}`);
             }
         };
         
-        // **********************************************
-        // ******* การแก้ไขเพื่อทำให้เป็น Collaboration *******
-        // **********************************************
-        // เปลี่ยนมาใช้ Public/Shared Collection เพื่อให้ทุกคนเห็นและแก้ไขได้
-        const getCollectionPath = () => `/artifacts/${LOCAL_APP_ID}/public/data/shared_travel_plans`;
+        // Path for storing trip data
+        // *** การแก้ไขสำคัญ: เปลี่ยนพาธจาก private เป็น shared collection ***
+        const getCollectionPath = () => {
+            // พาธเดิม: `/artifacts/${LOCAL_APP_ID}/users/${userId}/travel_plans`;
+            // พาธใหม่: 
+            return `/artifacts/${LOCAL_APP_ID}/shared_travel_plans`; 
+        }
 
-
+        // --- State and View Management ---
+        let currentTrip = null; // Stores the currently selected trip object
+        let currentTripDocId = null; // Stores the Firestore document ID
+        
         // Utility function to format currency
         const formatCurrency = (amount) => {
             return (amount || 0).toLocaleString('th-TH', { style: 'currency', currency: 'THB', minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -206,7 +191,7 @@
                 <div class="bg-white p-6 rounded-xl container-shadow">
                     <h2 class="text-2xl font-bold text-gray-800 mb-4">รายการแผนการเดินทางที่แชร์ร่วมกัน</h2>
                     <div id="trip-list" class="space-y-4 mb-6">
-                        ${trips.length === 0 ? '<p class="text-gray-500">ยังไม่มีแผนการเดินทางที่แชร์ไว้ ลองสร้างแผนใหม่เลย!</p>' : ''}
+                        ${trips.length === 0 ? '<p class="text-gray-500">คุณยังไม่มีแผนการเดินทาง ลองสร้างแผนใหม่เลย!</p>' : ''}
                     </div>
                     <button id="new-trip-btn" class="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition duration-150 flex items-center justify-center">
                         <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
@@ -315,7 +300,6 @@
                     </button>
                 </div>
                 
-                <!-- Expense Dashboard Summary -->
                 <div class="bg-blue-100 p-4 rounded-xl shadow-inner mb-6 flex items-center justify-between">
                     <div>
                         <h3 class="text-xl font-bold text-blue-800">ภาพรวมค่าใช้จ่ายทั้งทริป</h3>
@@ -327,8 +311,7 @@
                 </div>
 
                 <div id="days-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <!-- Daily Itineraries will be injected here -->
-                </div>
+                    </div>
             `;
 
             document.getElementById('back-to-list-btn').onclick = () => {
@@ -353,12 +336,9 @@
                         วันที่ ${dayIndex + 1} (${dayData.date})
                     </h3>
                     <div id="activity-form-anchor-${dayIndex}">
-                        <!-- Activity form will be rendered here if active -->
-                    </div>
+                        </div>
                     <div id="activities-${dayIndex}" class="flex-grow space-y-3 custom-scrollbar overflow-y-auto pr-2">
-                        <!-- Activities -->
-                    </div>
-                    <!-- Daily Expense Summary -->
+                        </div>
                     <div class="mt-4 pt-3 border-t border-gray-100">
                         <p class="text-lg font-bold text-red-600">
                             รวมค่าใช้จ่ายวันนี้: ${dailyTotalFormatted}
@@ -401,15 +381,12 @@
                     <div class="flex-grow">
                         <p class="text-lg font-bold text-gray-800">${activity.time} - ${activity.name}</p>
                         <p class="text-sm text-gray-600">${activity.notes || 'ไม่มีบันทึกย่อ'}</p>
-                        <!-- Display Cost -->
                         <p class="text-sm font-semibold text-red-600 mt-1">ค่าใช้จ่าย: ${formatCurrency(cost)}</p>
                     </div>
                     <div class="flex space-x-1 flex-shrink-0">
-                        <!-- NEW: Edit Button -->
                         <button data-day-index="${dayIndex}" data-activity-index="${activityIndex}" class="edit-activity-btn text-blue-500 hover:text-blue-700 p-1 rounded-full hover:bg-blue-100 transition duration-150" title="แก้ไข">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                         </button>
-                        <!-- Delete Button -->
                         <button data-day-index="${dayIndex}" data-activity-index="${activityIndex}" class="delete-activity-btn text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100 transition duration-150" title="ลบ">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                         </button>
@@ -513,7 +490,7 @@
 
         // --- Firebase Data Operations ---
 
-        // Real-time listener for the list of trips (unchanged)
+        // Real-time listener for the list of trips (uses new shared path)
         const loadTripList = () => {
             if (!db || !userId) return;
 
@@ -536,7 +513,7 @@
             });
         };
 
-        // Loads a specific trip's details and sets up a listener (unchanged)
+        // Loads a specific trip's details and sets up a listener (uses new shared path)
         const loadTripDetails = (docId) => {
             if (!db || !userId) return;
 
@@ -564,7 +541,7 @@
             });
         };
 
-        // Handles creating a new trip document (unchanged)
+        // Handles creating a new trip document (uses new shared path)
         const handleSaveTrip = async (e) => {
             e.preventDefault();
             if (!db || !userId) return;
@@ -584,8 +561,6 @@
                 province,
                 startDate: startDateStr,
                 endDate: endDateStr,
-                // เพิ่ม userId เพื่อระบุว่าใครสร้าง (ไม่บังคับ แต่ดีต่อการติดตาม)
-                createdBy: userId, 
                 createdAt: new Date(),
                 days: generateDayObjects(startDateStr, endDateStr)
             };
@@ -613,7 +588,7 @@
             return days;
         };
 
-        // NEW: Unified Handler for Creating and Updating Activities
+        // Unified Handler for Creating and Updating Activities (uses new shared path)
         const handleActivityFormSubmit = async (e, dayIndex, activityIndex = null) => {
             e.preventDefault();
             if (!db || !userId || !currentTripDocId) return;
@@ -656,7 +631,7 @@
             }
         };
 
-        // Handles deleting an activity (unchanged)
+        // Handles deleting an activity (uses new shared path)
         const deleteActivity = async (dayIndex, activityIndex) => {
             if (!db || !userId || !currentTripDocId) return;
 
@@ -673,7 +648,7 @@
             }
         };
 
-        // Handles deleting an entire trip (unchanged)
+        // Handles deleting an entire trip (uses new shared path)
         const deleteTrip = async (docId) => {
             if (!db || !userId) return;
 
