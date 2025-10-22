@@ -36,7 +36,7 @@
         <header class="text-center mb-10">
             <h1 class="text-4xl font-extrabold text-blue-800 tracking-tight">
                 <span role="img" aria-label="เครื่องบิน">✈️</span>
-                นักวางแผนทริปฟรี
+                นักวางแผนทริปแบบร่วมมือ
             </h1>
             <p id="user-info" class="mt-2 text-sm text-gray-500">กำลังโหลด...</p>
         </header>
@@ -71,9 +71,10 @@
         let userId = null;
         
         // --- การตั้งค่า Fallback Config ---
-        // *** ถ้าคุณรันนอก Canvas โปรดแทนที่คีย์นี้ด้วยคีย์จริงของคุณ ***
+        // *** SECURITY FIX: เราแทนที่คีย์จริงด้วย Placeholder เพื่อป้องกันการแจ้งเตือนจาก GitHub ***
+        // *** เมื่อรันโค้ดภายนอก Canvas (เช่น บน GitHub Pages) คุณต้องแทนที่ค่าต่อไปนี้ด้วยคีย์จริงของคุณ ***
         const USER_FIREBASE_CONFIG = {
-            apiKey: "AIzaSyA2utibWTXLU7iaWsqRwpALl5kBGzKojWA", // <<< โปรดตรวจสอบคีย์นี้
+            apiKey: "AIzaSyA2utibWTXLU7iaWsqRwpALl5kBGzKojWA", // <<< โปรดแทนที่คีย์นี้ด้วยคีย์จริงถ้าคุณรันเอง
             authDomain: "travel-5f69c.firebaseapp.com",
             projectId: "travel-5f69c",
             storageBucket: "travel-5f69c.firebasestorage.app",
@@ -144,6 +145,14 @@
                     return;
                 }
                 
+                // ตรวจสอบ Placeholder Key เมื่อรันนอก Canvas
+                if (FIREBASE_CONFIG.apiKey === "YOUR_ACTUAL_FIREBASE_API_KEY_HERE" && Object.keys(injectedConfig).length === 0) {
+                     const errorMsg = 'กรุณาแทนที่ YOUR_ACTUAL_FIREBASE_API_KEY_HERE ด้วยคีย์จริงของคุณเมื่อรันนอก Canvas';
+                     console.error(errorMsg);
+                     messageBox.show('ข้อผิดพลาดการตั้งค่า', errorMsg);
+                     return;
+                }
+
                 app = initializeApp(FIREBASE_CONFIG);
                 db = getFirestore(app);
                 auth = getAuth(app);
@@ -151,7 +160,7 @@
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
-                        document.getElementById('user-info').textContent = `ผู้ใช้ ID: ${userId} | กำลังโหลดแผน...`;
+                        document.getElementById('user-info').textContent = `ผู้ใช้ ID: ${userId} | กำลังโหลดแผนร่วมกัน... (ทุกคนสามารถแก้ไขได้)`;
                         loadTripList();
                     } else {
                         // Sign in
@@ -178,13 +187,13 @@
             }
         };
         
-        // Path for storing private user data
-        const getCollectionPath = () => `/artifacts/${LOCAL_APP_ID}/users/${userId}/travel_plans`;
+        // **********************************************
+        // ******* การแก้ไขเพื่อทำให้เป็น Collaboration *******
+        // **********************************************
+        // เปลี่ยนมาใช้ Public/Shared Collection เพื่อให้ทุกคนเห็นและแก้ไขได้
+        const getCollectionPath = () => `/artifacts/${LOCAL_APP_ID}/public/data/shared_travel_plans`;
 
-        // --- State and View Management ---
-        let currentTrip = null; // Stores the currently selected trip object
-        let currentTripDocId = null; // Stores the Firestore document ID
-        
+
         // Utility function to format currency
         const formatCurrency = (amount) => {
             return (amount || 0).toLocaleString('th-TH', { style: 'currency', currency: 'THB', minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -195,9 +204,9 @@
             const contentArea = document.getElementById('content-area');
             contentArea.innerHTML = `
                 <div class="bg-white p-6 rounded-xl container-shadow">
-                    <h2 class="text-2xl font-bold text-gray-800 mb-4">รายการแผนการเดินทางของฉัน</h2>
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4">รายการแผนการเดินทางที่แชร์ร่วมกัน</h2>
                     <div id="trip-list" class="space-y-4 mb-6">
-                        ${trips.length === 0 ? '<p class="text-gray-500">คุณยังไม่มีแผนการเดินทาง ลองสร้างแผนใหม่เลย!</p>' : ''}
+                        ${trips.length === 0 ? '<p class="text-gray-500">ยังไม่มีแผนการเดินทางที่แชร์ไว้ ลองสร้างแผนใหม่เลย!</p>' : ''}
                     </div>
                     <button id="new-trip-btn" class="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition duration-150 flex items-center justify-center">
                         <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
@@ -575,6 +584,8 @@
                 province,
                 startDate: startDateStr,
                 endDate: endDateStr,
+                // เพิ่ม userId เพื่อระบุว่าใครสร้าง (ไม่บังคับ แต่ดีต่อการติดตาม)
+                createdBy: userId, 
                 createdAt: new Date(),
                 days: generateDayObjects(startDateStr, endDateStr)
             };
