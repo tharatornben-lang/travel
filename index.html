@@ -35,7 +35,7 @@
         <!-- Header -->
         <header class="text-center mb-10">
             <h1 class="text-4xl font-extrabold text-blue-800 tracking-tight">
-                <span role="img" aria-label="เครื่องบิน"✈️</span>
+                <span role="img" aria-label="เครื่องบิน">✈️</span>
                 นักวางแผนทริปฟรี
             </h1>
             <p id="user-info" class="mt-2 text-sm text-gray-500">กำลังโหลด...</p>
@@ -70,9 +70,10 @@
         let app, db, auth;
         let userId = null;
         
-        // --- การตั้งค่า Fallback Config (ค่าที่คุณให้มา) ---
+        // --- การตั้งค่า Fallback Config ---
+        // *** ถ้าคุณรันนอก Canvas โปรดแทนที่คีย์นี้ด้วยคีย์จริงของคุณ ***
         const USER_FIREBASE_CONFIG = {
-            apiKey: "AIzaSyA2utibWTXLU7iaWsqRwpALl5kBGzKojWA",
+            apiKey: "AIzaSyA2utibWTXLU7iaWsqRwpALl5kBGzKojWA", // <<< โปรดตรวจสอบคีย์นี้
             authDomain: "travel-5f69c.firebaseapp.com",
             projectId: "travel-5f69c",
             storageBucket: "travel-5f69c.firebasestorage.app",
@@ -97,7 +98,6 @@
         const FIREBASE_CONFIG = Object.keys(injectedConfig).length > 0 ? injectedConfig : USER_FIREBASE_CONFIG;
         
         // 3. กำหนด LOCAL_APP_ID โดยใช้ Project ID เป็น Fallback เมื่อรันภายนอก
-        //    (เพื่อให้ Path: /artifacts/{ProjectID}/users/{userId}/... ทำงานได้ดีขึ้น)
         const LOCAL_APP_ID = typeof __app_id !== 'undefined' 
             ? __app_id 
             : FIREBASE_CONFIG.projectId || 'default-app-id';
@@ -132,13 +132,18 @@
         // --- Firebase Initialization and Authentication ---
         const initializeFirebase = async () => {
             try {
-                // *** การแก้ไข: เพิ่ม Debug Logging เพื่อช่วยในการวินิจฉัยปัญหา ***
+                // เพิ่ม Debug Logging และ Log config ที่ใช้
                 setLogLevel('debug'); 
+                console.log("Firebase Config ที่กำลังใช้:", FIREBASE_CONFIG);
                 
-                if (Object.keys(FIREBASE_CONFIG).length === 0 || !FIREBASE_CONFIG.apiKey) {
-                     messageBox.show('ข้อผิดพลาด', 'ไม่พบการตั้งค่า Firebase กรุณาตรวจสอบการกำหนดค่า');
+                // *** การตรวจสอบที่เพิ่มเข้ามาเพื่อจัดการกับข้อผิดพลาด "auth/configuration-not-found" ***
+                if (!FIREBASE_CONFIG.apiKey || !FIREBASE_CONFIG.projectId) {
+                    const errorMsg = 'ไม่พบค่า apiKey หรือ projectId ในการตั้งค่า Firebase กรุณาตรวจสอบว่าคุณใส่ Firebase Config ที่ถูกต้อง';
+                    console.error(errorMsg);
+                    messageBox.show('ข้อผิดพลาดการตั้งค่า', errorMsg);
                     return;
                 }
+                
                 app = initializeApp(FIREBASE_CONFIG);
                 db = getFirestore(app);
                 auth = getAuth(app);
@@ -151,9 +156,10 @@
                     } else {
                         // Sign in
                         if (INITIAL_AUTH_TOKEN) {
+                            // ใช้ Custom Token เมื่อรันใน Canvas
                             await signInWithCustomToken(auth, INITIAL_AUTH_TOKEN);
                         } else {
-                            // Fallback to anonymous sign-in (ใช้เมื่อรันบน GitHub Pages)
+                            // Fallback to anonymous sign-in 
                             console.log("No initial token, signing in anonymously.");
                             await signInAnonymously(auth);
                         }
@@ -162,7 +168,13 @@
 
             } catch (error) {
                 console.error("Error during Firebase initialization or sign-in:", error);
-                messageBox.show('ข้อผิดพลาด', `เกิดข้อผิดพลาดในการเชื่อมต่อ Firebase: ${error.message}`);
+                if (error.code === 'auth/configuration-not-found') {
+                    messageBox.show('ข้อผิดพลาดการเชื่อมต่อ', 
+                        `เกิดข้อผิดพลาดในการเชื่อมต่อ: ${error.message}
+                        โปรดตรวจสอบ 2 สิ่ง: 1. API Key ในโค้ดถูกต้องหรือไม่ 2. คุณได้เปิดใช้งาน Anonymous Sign-in ใน Firebase Console หรือยัง?`);
+                } else {
+                    messageBox.show('ข้อผิดพลาด', `เกิดข้อผิดพลาดในการเชื่อมต่อ Firebase: ${error.message}`);
+                }
             }
         };
         
